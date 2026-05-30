@@ -9,13 +9,15 @@ AUTO_SUSPEND and lifecycle policies are not configured correctly.
 
 
 
-## ADR-002: Three-zone data lake architecture
-**Decision:** raw-zone → clean-zone → curated-zone  
-**Alternatives considered:** Single bucket with folder prefixes  
-**Reason:** Each zone has a different retention policy, access pattern, 
-and data contract. Separating them makes it impossible to accidentally 
-query unvalidated data from downstream models.  
-**Consequence:** More buckets to manage, but enforces data quality by design.
+## ADR-002: Bronze/Silver/Gold medallion architecture
+**Decision:** Three-layer medallion architecture over a flat structure  
+**Alternatives considered:** Single container with folder prefixes  
+**Reason:** Each layer has a different data contract. Bronze is 
+append-only raw source data. Silver is validated and deduplicated. 
+Gold is aggregated and optimized for BI queries. Separating them 
+makes it impossible for downstream models to accidentally read 
+unvalidated data.  
+**Consequence:** Three containers to manage instead of one.
 
 ## ADR-003: Snowflake as the analytical warehouse
 **Decision:** Snowflake over PostgreSQL for the warehouse layer  
