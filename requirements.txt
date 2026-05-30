@@ -1,0 +1,10 @@
+requests==2.31.0
+pandas==2.1.4
+azure-storage-file-datalake==12.14.0
+azure-identity==1.15.0
+snowflake-connector-python==3.6.0
+snowflake-sqlalchemy==1.5.1
+python-dotenv==1.0.0
+duckdb==0.10.0
+great-expectations==0.18.12
+pyspark==3.5.0
