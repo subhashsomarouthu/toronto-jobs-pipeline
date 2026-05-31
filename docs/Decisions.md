@@ -1,54 +1,126 @@
+# Architecture Decision Records
+
 ## ADR-001: Azure ADLS Gen2 as object storage
-**Decision:** Use Azure ADLS Gen2 (student account) instead of MinIO  
-**Alternatives considered:** MinIO (Docker), local filesystem  
-**Reason:** ADLS Gen2 is production Azure infrastructure — the same 
-service used at TELUS and Moneris. Using it directly means the ingestion 
-code running locally is identical to what runs in production.  
-**Consequence:** Requires Azure student account. Small cost risk if 
-AUTO_SUSPEND and lifecycle policies are not configured correctly.
+**Decision:** Azure ADLS Gen2 (student account) as the data lake storage layer  
+**Alternatives considered:** MinIO (Docker), local filesystem, AWS S3  
+**Reason:** ADLS Gen2 is production Azure infrastructure — the same service 
+used at TELUS and Moneris. Using it directly means ingestion code running 
+locally is identical to what runs in production. Hierarchical namespace 
+enables folder-level access control and efficient Spark reads.  
+**Consequence:** Requires Azure student account. Cost risk if lifecycle 
+policies are not configured. Mitigated by LRS replication and no 
+redundant storage tiers.
 
-
-
-## ADR-002: Bronze/Silver/Gold medallion architecture
-**Decision:** Three-layer medallion architecture over a flat structure  
-**Alternatives considered:** Single container with folder prefixes  
-**Reason:** Each layer has a different data contract. Bronze is 
-append-only raw source data. Silver is validated and deduplicated. 
-Gold is aggregated and optimized for BI queries. Separating them 
-makes it impossible for downstream models to accidentally read 
-unvalidated data.  
-**Consequence:** Three containers to manage instead of one.
+## ADR-002: Four-layer storage architecture (raw/bronze/silver/gold)
+**Decision:** Four zones — raw, bronze, silver, gold — not three  
+**Alternatives considered:** Three-layer medallion (bronze/silver/gold only), 
+single flat container with folder prefixes  
+**Reason:** Raw is a separate disaster recovery layer — exact byte-for-byte 
+copy of source data with zero transformation applied. Bronze adds ingestion 
+metadata and converts to Parquet. Separating raw from bronze means if 
+Bronze ingestion has a bug, the original source data is always recoverable 
+by replaying from raw. Each layer has a distinct data contract.  
+**Consequence:** Extra storage container, negligible cost on LRS pricing.
 
 ## ADR-003: Snowflake as the analytical warehouse
-**Decision:** Snowflake over PostgreSQL for the warehouse layer  
-**Alternatives considered:** PostgreSQL, DuckDB  
-**Reason:** Snowflake's separation of storage and compute means warehouse 
-costs scale to zero when idle (AUTO_SUSPEND). It also supports 
-semi-structured data natively via VARIANT columns and integrates 
-directly with dbt and Power BI without drivers.  
-**Consequence:** Free trial credits are finite — all warehouses must 
-have AUTO_SUSPEND=60 to protect credits during development.
+**Decision:** Snowflake over PostgreSQL or DuckDB for the warehouse layer  
+**Alternatives considered:** PostgreSQL, DuckDB, Azure Synapse Analytics  
+**Reason:** Snowflake separates storage and compute — warehouse costs scale 
+to zero when idle via AUTO_SUSPEND=60. Supports semi-structured data natively 
+via VARIANT columns. Integrates directly with Databricks, dbt, and Power BI 
+without additional drivers. Most requested warehouse in Toronto job postings 
+alongside Databricks.  
+**Consequence:** Free trial credits are finite. All warehouses configured 
+with AUTO_SUSPEND=60 to protect credits during development.
 
 ## ADR-004: Terraform for infrastructure as code
 **Decision:** All Azure infrastructure defined in Terraform, not created manually  
-**Alternatives considered:** Azure Portal (manual clicking), Azure CLI scripts, Bicep  
-**Reason:** Terraform is cloud-agnostic and the most requested IaC tool 
-in Toronto job postings. The entire environment can be destroyed and 
-recreated with one command — no tribal knowledge, no configuration drift.  
-**Consequence:** Terraform state must be managed carefully. For this 
-project state is local. In production it would live in Azure Blob 
-Storage with state locking via Azure Cosmos DB.
+**Alternatives considered:** Azure Portal (manual), Azure CLI scripts, Bicep  
+**Reason:** Terraform is cloud-agnostic and the most requested IaC tool in 
+Toronto job postings. The entire environment can be destroyed and recreated 
+with one command — no tribal knowledge, no configuration drift. Every 
+resource is version controlled and peer reviewable.  
+**Consequence:** Terraform state must be managed carefully. For this project 
+state is local. In production it would live in Azure Blob Storage backend 
+with state locking via Azure Cosmos DB.
 
 ## ADR-005: terraform.tfstate and terraform.tfvars excluded from version control
-**Decision:** Both files are gitignored and stored locally only  
+**Decision:** Both files gitignored and stored locally only  
 **Alternatives considered:** Committing state to repo, encrypting secrets in repo  
-**Reason:** tfstate contains plaintext secrets including storage account 
-keys. During this project GitHub secret scanning blocked a push because 
-tfstate was accidentally committed — the correct fix was to rebase the 
-commit out of history, rotate the Azure storage key, and add tfstate 
-to gitignore permanently. tfvars contains environment-specific values 
-that differ per developer.  
-**Consequence:** State is not shared between developers. Acceptable for 
-a solo project. In a team environment, state would be stored in Azure 
-Blob Storage with a shared backend configuration and Cosmos DB state 
-locking to prevent concurrent applies.
+**Reason:** tfstate contains plaintext secrets including storage account keys. 
+During this project GitHub secret scanning blocked a push because tfstate 
+was accidentally committed. The correct fix was to rebase the commit out of 
+history, rotate the compromised Azure storage key, and permanently add 
+tfstate to gitignore. This is a real production incident and recovery — 
+documented here as a learning record.  
+**Consequence:** State not shared between developers. Acceptable for solo 
+project. In a team environment state would be stored in Azure Blob Storage 
+with shared backend and Cosmos DB state locking to prevent concurrent applies.
+
+## ADR-006: Databricks Delta Live Tables for Bronze→Silver→Gold processing
+**Decision:** Databricks DLT instead of plain PySpark scripts or dbt Core  
+**Alternatives considered:** Plain PySpark scripts, dbt Core, Azure Data Factory  
+**Reason:** DLT is declarative — transformations and data quality expectations 
+are defined once, DLT manages execution, retries, and lineage automatically. 
+Matches production stack used at TELUS and Moneris. Databricks Community 
+Edition is free for development. DLT pipelines are observable by default — 
+built-in lineage graph, quality metrics, and pipeline monitoring.  
+**Consequence:** Locked into Databricks ecosystem for transformation layer. 
+Acceptable since Databricks is the dominant processing platform in Toronto 
+market and directly maps to resume experience.
+
+## ADR-007: Three data sources — Kaggle, Adzuna, Indeed/Apify
+**Decision:** Three sources with different ingestion patterns  
+**Alternatives considered:** Single source (Kaggle only), web scraping  
+
+| Source | Pattern | Frequency | Cost |
+|---|---|---|---|
+| Kaggle LinkedIn dataset | Full bulk load | Once — historical backfill | Free |
+| Adzuna API | Incremental batch | Daily | Free |
+| Indeed via Apify | Incremental batch | Daily | ~$0.10/1000 listings |
+
+**Reason:** Three sources demonstrate three real ingestion patterns on one 
+pipeline. Kaggle provides 124,000 historical records for bulk load testing. 
+Adzuna provides daily Canadian job postings via free REST API. Apify scrapes 
+Indeed for richer job descriptions and skills data unavailable in Adzuna.  
+**Consequence:** Apify has per-listing cost. Circuit breaker monitors credit 
+balance before each run — skips Indeed source with alert notification if 
+balance drops below $1.00 threshold. Pipeline continues with remaining sources.
+
+## ADR-008: Kafka for simulated real-time streaming layer
+**Decision:** Apache Kafka added as streaming demonstration layer  
+**Alternatives considered:** No streaming layer, Azure Event Hubs  
+**Reason:** Kaggle, Adzuna, and Apify are all batch pull sources — none 
+produce true real-time events. Kafka is added to simulate a real-time job 
+posting feed for architectural completeness. A Python producer generates 
+mock job events every 30 seconds. A consumer writes them to Bronze. This 
+demonstrates producer/consumer patterns, topic design, offset management, 
+and watermark-based late data handling without additional cost.  
+**Consequence:** Simulated data, not real. Clearly documented as architectural 
+demonstration. In production this would be replaced by a real event source 
+such as a job board webhook or clickstream feed.
+
+## ADR-009: Power BI as the dashboard layer
+**Decision:** Power BI Desktop connected to Snowflake for final dashboard  
+**Alternatives considered:** Evidence.dev, Metabase, Grafana  
+**Reason:** Power BI is already on the resume from TELUS and Moneris 
+experience. Connecting Power BI directly to Snowflake via the native 
+connector is a production pattern used at most Canadian enterprises. 
+Demonstrates DirectQuery vs Import mode trade-offs. Dashboard published 
+to Power BI Service for shareable URL (free with student Microsoft account).  
+**Consequence:** Power BI Desktop is Windows-only. .pbix file not 
+easily version controlled. Dashboard screenshots committed to repo as 
+documentation. Live link shared via Power BI Service.
+
+## ADR-010: Parameterized pipeline framework via control tables
+**Decision:** Single generic Airflow DAG driven by pipeline_config table  
+**Alternatives considered:** One DAG per source, hardcoded pipeline logic  
+**Reason:** A parameterized framework means adding a new data source 
+requires inserting one row into pipeline_config — no code change. 
+pipeline_control table tracks watermarks for incremental loading — 
+each source stores its last_successful_run timestamp and last_record_loaded 
+value. Circuit breaker logic reads credit_balance from pipeline_config 
+before each Apify run.  
+**Consequence:** More complex initial setup. Pays off immediately when 
+a third or fourth source is added. This is the pattern used at scale 
+in production data platforms.

@@ -25,6 +25,12 @@ resource "azurerm_storage_account" "main" {
   is_hns_enabled           = true
 }
 
+resource "azurerm_storage_container" "raw" {
+  name                  = "raw"
+  storage_account_name  = azurerm_storage_account.main.name
+  container_access_type = "private"
+}
+
 resource "azurerm_storage_container" "bronze" {
   name                  = "bronze"
   storage_account_name  = azurerm_storage_account.main.name
