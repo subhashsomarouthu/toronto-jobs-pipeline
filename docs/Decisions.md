@@ -124,3 +124,24 @@ before each Apify run.
 **Consequence:** More complex initial setup. Pays off immediately when 
 a third or fourth source is added. This is the pattern used at scale 
 in production data platforms.
+
+## ADR-011: Databricks Unity Catalog for data governance
+**Decision:** Use Unity Catalog instead of legacy Hive metastore  
+**Alternatives considered:** Hive metastore, no catalog  
+**Reason:** Unity Catalog provides centralized access control, data 
+lineage, and auditing across all Databricks workspaces. External 
+locations registered once — all notebooks and DLT pipelines access 
+ADLS without any credentials in code.  
+**Consequence:** Requires Premium tier. Trial provides 14 days free.
+
+## ADR-012: Access Connector managed identity for ADLS authentication
+**Decision:** Azure Access Connector managed identity over Service Principal  
+**Alternatives considered:** Service Principal OAuth, account key  
+**Reason:** Databricks Unity Catalog on Azure only supports managed 
+identity for storage credentials — Service Principal option not 
+available in the credential type dropdown. Access Connector is the 
+recommended production approach by Microsoft and Databricks for 
+Azure deployments. Zero credentials in code or notebooks.  
+**Consequence:** Requires a separate Access Connector Azure resource. 
+Added to jobs-pipeline-rg and managed identity granted 
+Storage Blob Data Contributor on ADLS.

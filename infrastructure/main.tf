@@ -48,3 +48,37 @@ resource "azurerm_storage_container" "gold" {
   storage_account_name  = azurerm_storage_account.main.name
   container_access_type = "private"
 }
+
+# Key Vault for secrets management
+data "azurerm_client_config" "current" {}
+
+resource "azurerm_key_vault" "main" {
+  name                        = "jobs-pipeline-kv"
+  resource_group_name         = azurerm_resource_group.main.name
+  location                    = azurerm_resource_group.main.location
+  sku_name                    = "standard"
+  tenant_id                   = data.azurerm_client_config.current.tenant_id
+  enable_rbac_authorization   = true
+}
+
+
+
+# Databricks workspace
+resource "azurerm_databricks_workspace" "main" {
+  name                = "jobs-pipeline-databricks"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  sku                 = "trial"
+  public_network_access_enabled = true
+}
+
+# Access Connector for Unity Catalog
+resource "azurerm_databricks_access_connector" "main" {
+  name                = "jobs-pipeline-connector"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+
+  identity {
+    type = "SystemAssigned"
+  }
+}
