@@ -145,3 +145,14 @@ Azure deployments. Zero credentials in code or notebooks.
 **Consequence:** Requires a separate Access Connector Azure resource. 
 Added to jobs-pipeline-rg and managed identity granted 
 Storage Blob Data Contributor on ADLS.
+
+## ADR-013: Null handling strategy — keep with placeholder over drop
+**Decision:** Replace nulls with standardized placeholders in silver layer
+**Alternatives considered:** Drop null records, keep nulls as-is  
+**Reason:** Dropping records loses data permanently — downstream models 
+may need those records for different analyses. Keeping nulls as-is 
+breaks aggregations and joins silently. Replacing with 'UNKNOWN' makes 
+the data gap explicit and queryable.  
+**Consequence:** 'UNKNOWN' values must be filtered in Gold layer 
+aggregations where company name is a dimension.
+
