@@ -12,7 +12,7 @@ from pyspark.sql import functions as F
 @dlt.expect_or_drop("valid_title_length", "length(title) < 100")
 def silver_kaggle_jobs():
     return (
-        dlt.read("bronze_kaggle_postings")
+        spark.table("jobs_pipeline_databricks.bronze.bronze_kaggle_postings")
         .filter(F.col("title").isNotNull())
         .filter(F.col("company_name").isNotNull())
         .filter(F.col("job_id").rlike("^[0-9]+$"))
@@ -68,7 +68,7 @@ def silver_kaggle_jobs():
 @dlt.expect_or_drop("valid_company", "company_name IS NOT NULL")
 def silver_adzuna_jobs():
     return (
-        dlt.read("bronze_adzuna_jobs")
+         spark.table("jobs_pipeline_databricks.bronze.bronze_adzuna_jobs")
         .filter(F.col("title").isNotNull())
         .filter(F.col("company_name").isNotNull())
         .withColumn("title", F.trim(F.upper(F.col("title"))))
@@ -118,7 +118,7 @@ def silver_adzuna_jobs():
 @dlt.expect_or_drop("valid_company", "company_name IS NOT NULL")
 def silver_linkedin_jobs():
     return (
-        dlt.read("bronze_linkedin_jobs")
+         spark.table("jobs_pipeline_databricks.bronze.bronze_linkedin_jobs")
         .filter(F.col("title").isNotNull())
         .filter(F.col("company_name").isNotNull())
         .withColumn("title", F.trim(F.upper(F.col("title"))))
