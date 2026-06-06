@@ -9,7 +9,8 @@ RAW_BASE = f"abfss://raw@{STORAGE_ACCOUNT}.dfs.core.windows.net"
 @dlt.table(
     name="gold_top_skills",
     comment="Top in-demand skills by job count — feeds dashboard",
-    table_properties={"quality": "gold"}
+    table_properties={"quality": "gold"},
+    path="abfss://gold@jobspipelinesubhash.dfs.core.windows.net/gold_top_skills"
 )
 def gold_top_skills():
     df_job_skills = (
@@ -47,7 +48,8 @@ def gold_top_skills():
 @dlt.table(
     name="gold_top_companies",
     comment="Top hiring companies by job count — feeds dashboard",
-    table_properties={"quality": "gold"}
+    table_properties={"quality": "gold"},
+    path="abfss://gold@jobspipelinesubhash.dfs.core.windows.net/gold_top_companies"
 )
 def gold_top_companies():
     return (
@@ -70,7 +72,9 @@ def gold_top_companies():
 @dlt.table(
     name="gold_salary_by_role",
     comment="Salary ranges by job title — feeds dashboard",
-    table_properties={"quality": "gold"}
+    table_properties={"quality": "gold"},
+     path="abfss://gold@jobspipelinesubhash.dfs.core.windows.net/gold_salary_by_role"
+    
 )
 def gold_salary_by_role():
     return (
@@ -98,7 +102,8 @@ def gold_salary_by_role():
 @dlt.table(
     name="gold_remote_ratio",
     comment="Remote vs onsite ratio by source and experience level",
-    table_properties={"quality": "gold"}
+    table_properties={"quality": "gold"},
+    path="abfss://gold@jobspipelinesubhash.dfs.core.windows.net/gold_remote_ratio"
 )
 def gold_remote_ratio():
     return (
@@ -126,7 +131,8 @@ def gold_remote_ratio():
 @dlt.table(
     name="gold_daily_trend",
     comment="Daily job posting trend by source",
-    table_properties={"quality": "gold"}
+    table_properties={"quality": "gold"},
+    path="abfss://gold@jobspipelinesubhash.dfs.core.windows.net/gold_daily_trend"
 )
 def gold_daily_trend():
     return (
