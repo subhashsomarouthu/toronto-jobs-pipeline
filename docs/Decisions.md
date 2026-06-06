@@ -156,3 +156,14 @@ the data gap explicit and queryable.
 **Consequence:** 'UNKNOWN' values must be filtered in Gold layer 
 aggregations where company name is a dimension.
 
+## ADR-014: Bronze expectations set to ALLOW — enforcement in silver
+**Decision:** DLT expectations in bronze layer use ALLOW action — 
+records are never dropped in bronze  
+**Alternatives considered:** DROP invalid records in bronze, FAIL pipeline  
+**Reason:** Bronze is a disaster recovery layer — it must be a complete 
+copy of source data. The Kaggle dataset has 57% null titles from malformed 
+CSV rows where job descriptions containing newlines cause column shifting. 
+Dropping these in bronze would make them unrecoverable. Silver enforces 
+quality by filtering to valid records only.  
+**Consequence:** Bronze contains 1.84M rows including malformed records. 
+Silver will contain ~778K clean records from Kaggle source only.
